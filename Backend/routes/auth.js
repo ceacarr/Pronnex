@@ -1,12 +1,23 @@
 import express from "express";
-import { validateRequest }  from "zod-express-middleware";
-import { protect } from "../middleware/authMiddleware.js";
-import { registerSchema, loginSchema } from "../libs/validate-schema.js";
-import { registerUser, loginUser, getMe } from "../controllers/authController.js";
+
+import { validateRequest } from "zod-express-middleware";
+import {
+  emailSchema,
+  loginSchema,
+  registerSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+} from "../libs/validate-schema.js";
+import {
+  loginUser,
+  registerUser,
+  resetPasswordRequest,
+  verifyEmail,
+  verifyResetPasswordTokenAndResetPassword,
+} from "../controllers/authController.js";
 
 const router = express.Router();
 
-// POST /api/auth/register
 router.post(
   "/register",
   validateRequest({
@@ -21,6 +32,30 @@ router.post(
   }),
   loginUser
 );
-router.get("/me", protect, getMe);
+
+router.post(
+  "/verify-email",
+  validateRequest({
+    body: verifyEmailSchema,
+  }),
+  verifyEmail
+);
+
+router.post(
+  "/reset-password-request",
+  validateRequest({
+    body: emailSchema,
+  }),
+  resetPasswordRequest
+);
+  
+router.post(
+ "/reset-password",
+  validateRequest({
+  body: resetPasswordSchema,
+ }),
+ verifyResetPasswordTokenAndResetPassword
+);
+
 
 export default router;
