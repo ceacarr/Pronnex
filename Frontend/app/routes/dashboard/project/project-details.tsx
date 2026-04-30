@@ -7,13 +7,33 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UseProjectQuery } from "@/hooks/use-project";
+import { useUpdateTaskStatusMutation } from "@/hooks/use-task";
 import { getProjectProgress } from "@/lib";
 import { cn } from "@/lib/utils";
 import type { Project, Task, TaskPriority, TaskStatus } from "@/types";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCenter,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { format } from "date-fns";
 import { AlertCircle, Calendar, CheckCircle, Clock, Settings } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { toast } from "sonner";
 
 const ProjectDetails = () => {
   const { projectId, workspaceId } = useParams<{
@@ -26,6 +46,9 @@ const ProjectDetails = () => {
   const [taskFilter, setTaskFilter] = useState<TaskStatus | "All">("All");
   const [priorityFilter, setPriorityFilter] = useState<"All" | TaskPriority>("All");
   const [dueFilter, setDueFilter] = useState<"All" | "DueToday" | "DueWeek">("All");
+  const [boardTasks, setBoardTasks] = useState<Task[]>([]);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const { mutate: updateTaskStatus } = useUpdateTaskStatusMutation();
 
   const { data, isLoading } = UseProjectQuery(projectId!) as {
     data: {
@@ -41,15 +64,18 @@ const ProjectDetails = () => {
         <Loader />
       </div>
     );
-
   if (!data?.project) {
     return <div>Project data not found</div>;
   }
-
   const { project, tasks } = data;
+
+  useEffect(() => {
+    setBoardTasks(tasks);
+  }, [tasks]);
+
   const projectProgress = getProjectProgress(tasks);
 
-  const filteredSortedTasks = [...tasks]
+  const filteredSortedTasks = [...boardTasks]
     .filter((task) => {
       if (priorityFilter !== "All" && task.priority !== priorityFilter) return false;
 
@@ -70,6 +96,108 @@ const ProjectDetails = () => {
 
   const getTasksByStatus = (status: TaskStatus) =>
     filteredSortedTasks.filter((task) => task.status === status);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  const activeTask = useMemo(
+    () => boardTasks.find((task) => task._id === activeTaskId),
+    [activeTaskId, boardTasks]
+  );
+
+  const statusColumns: TaskStatus[] = ["To Do", "In Progress", "Done"];
+
+  const getColumnItems = (status: TaskStatus) =>
+    getTasksByStatus(status).map((task) => task._id);
+
+  const getStatusByContainerId = (containerId?: string | null): TaskStatus | null => {
+    if (!containerId) return null;
+    if (statusColumns.includes(containerId as TaskStatus)) return containerId as TaskStatus;
+
+    const foundTask = boardTasks.find((task) => task._id === containerId);
+    return foundTask?.status ?? null;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveTaskId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveTaskId(null);
+
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    const fromStatus = getStatusByContainerId(activeId);
+    const toStatus = getStatusByContainerId(overId);
+
+    if (!fromStatus || !toStatus) return;
+
+    setBoardTasks((prevTasks) => {
+      const current = [...prevTasks];
+      const activeIndex = current.findIndex((task) => task._id === activeId);
+      if (activeIndex === -1) return prevTasks;
+
+      const activeTaskItem = current[activeIndex];
+
+      if (fromStatus === toStatus) {
+        const sortedIds = current
+          .filter((task) => task.status === fromStatus)
+          .map((task) => task._id);
+
+        const oldPos = sortedIds.indexOf(activeId);
+        const newPos = statusColumns.includes(overId as TaskStatus)
+          ? sortedIds.length - 1
+          : sortedIds.indexOf(overId);
+
+        if (oldPos === -1 || newPos === -1 || oldPos === newPos) return prevTasks;
+
+        const movedInColumn = arrayMove(
+          current.filter((task) => task.status === fromStatus),
+          oldPos,
+          newPos
+        );
+
+        const notInColumn = current.filter((task) => task.status !== fromStatus);
+        return [...notInColumn, ...movedInColumn];
+      }
+
+      const updatedTask = { ...activeTaskItem, status: toStatus };
+      const withoutActive = current.filter((task) => task._id !== activeId);
+      const toColumnTasks = withoutActive.filter((task) => task.status === toStatus);
+      const nonToColumnTasks = withoutActive.filter((task) => task.status !== toStatus);
+
+      const insertIndex = statusColumns.includes(overId as TaskStatus)
+        ? toColumnTasks.length
+        : toColumnTasks.findIndex((task) => task._id === overId);
+
+      if (insertIndex === -1) {
+        toColumnTasks.push(updatedTask);
+      } else {
+        toColumnTasks.splice(insertIndex, 0, updatedTask);
+      }
+
+      updateTaskStatus(
+        { taskId: activeId, status: toStatus },
+        {
+          onError: () => {
+            toast.error("Task status could not be updated");
+            setBoardTasks(prevTasks);
+          },
+        }
+      );
+
+      return [...nonToColumnTasks, ...toColumnTasks];
+    });
+  };
 
   const handleTaskClick = (taskId: string) => {
     navigate(
@@ -191,25 +319,48 @@ const ProjectDetails = () => {
           </div>
 
           <TabsContent value="all" className="m-0">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <TaskColumn
-                title="To Do"
-                tasks={getTasksByStatus("To Do")}
-                onTaskClick={handleTaskClick}
-              />
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <TaskColumn
+                  title="To Do"
+                  tasks={getTasksByStatus("To Do")}
+                  onTaskClick={handleTaskClick}
+                  sortableIds={getColumnItems("To Do")}
+                />
 
-              <TaskColumn
-                title="In Progress"
-                tasks={getTasksByStatus("In Progress")}
-                onTaskClick={handleTaskClick}
-              />
+                <TaskColumn
+                  title="In Progress"
+                  tasks={getTasksByStatus("In Progress")}
+                  onTaskClick={handleTaskClick}
+                  sortableIds={getColumnItems("In Progress")}
+                />
 
-              <TaskColumn
-                title="Done"
-                tasks={getTasksByStatus("Done")}
-                onTaskClick={handleTaskClick}
-              />
-            </div>
+                <TaskColumn
+                  title="Done"
+                  tasks={getTasksByStatus("Done")}
+                  onTaskClick={handleTaskClick}
+                  sortableIds={getColumnItems("Done")}
+                />
+              </div>
+
+              <DragOverlay>
+                {activeTask ? (
+                  <div className="w-full max-w-md rounded-lg border bg-background p-2.5 shadow-md">
+                    <p className="font-medium line-clamp-1">{activeTask.title}</p>
+                    {activeTask.description && (
+                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                        {activeTask.description}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
           </TabsContent>
 
           <TabsContent value="todo" className="m-0">
@@ -218,6 +369,7 @@ const ProjectDetails = () => {
                 title="To Do"
                 tasks={getTasksByStatus("To Do")}
                 onTaskClick={handleTaskClick}
+                sortableIds={getColumnItems("To Do")}
               />
             </div>
           </TabsContent>
@@ -228,6 +380,7 @@ const ProjectDetails = () => {
                 title="In Progress"
                 tasks={getTasksByStatus("In Progress")}
                 onTaskClick={handleTaskClick}
+                sortableIds={getColumnItems("In Progress")}
               />
             </div>
           </TabsContent>
@@ -238,6 +391,7 @@ const ProjectDetails = () => {
                 title="Done"
                 tasks={getTasksByStatus("Done")}
                 onTaskClick={handleTaskClick}
+                sortableIds={getColumnItems("Done")}
               />
             </div>
           </TabsContent>
@@ -280,14 +434,20 @@ const getPriorityBadgeClass = (priority: TaskPriority) => {
 const TaskColumn = ({
   title,
   tasks,
+  sortableIds,
   onTaskClick,
   isFullWidth = false,
 }: {
   title: TaskStatus;
   tasks: Task[];
+  sortableIds: string[];
   onTaskClick: (taskId: string) => void;
   isFullWidth?: boolean;
 }) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: title,
+  });
+
   return (
     <div className={cn("space-y-2", isFullWidth ? "w-full" : "")}>
       <div className="flex items-center justify-between px-1">
@@ -299,7 +459,14 @@ const TaskColumn = ({
           {tasks.length}
         </Badge>
       </div>
-      <div className="space-y-2">
+      <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
+        <div
+          ref={setNodeRef}
+          className={cn(
+            "space-y-2 min-h-24 rounded-md transition-colors",
+            isOver ? "bg-muted/40" : ""
+          )}
+        >
         {tasks.length === 0 ? (
           <div className="rounded-lg border border-dashed p-3 text-center">
             <div className="mx-auto mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-muted/70">
@@ -312,49 +479,78 @@ const TaskColumn = ({
           </div>
         ) : (
           tasks.map((task) => (
-            <button
-              key={task._id}
-              type="button"
-              onClick={() => onTaskClick(task._id)}
-              className="w-full text-left rounded-lg border p-2.5 transition hover:bg-muted/40"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <Badge
-                  variant="outline"
-                  className={cn("text-xs", getPriorityBadgeClass(task.priority))}
-                >
-                  {task.priority}
-                </Badge>
-                {getStatusIcon(task.status)}
-              </div>
-
-              <p className="mt-2 font-medium line-clamp-1">{task.title}</p>
-              {task.description && (
-                <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                  {task.description}
-                </p>
-              )}
-              <div className="mt-2 flex items-center justify-end">
-                {task.dueDate && (
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <Calendar className="h-3 w-3" />
-                    {format(new Date(task.dueDate), "dd MMM yyyy")}
-                  </span>
-                )}
-              </div>
-              <div className="mt-2 flex -space-x-2">
-                {task.assignees?.slice(0, 3).map((assignee) => (
-                  <Avatar key={assignee._id} className="h-6 w-6 border">
-                    <AvatarImage src={assignee.profilePicture} />
-                    <AvatarFallback>{assignee.name?.charAt(0) || "U"}</AvatarFallback>
-                  </Avatar>
-                ))}
-              </div>
-            </button>
+            <SortableTaskCard key={task._id} task={task} onTaskClick={onTaskClick} />
           ))
         )}
-      </div>
+        </div>
+      </SortableContext>
     </div>
+  );
+};
+
+const SortableTaskCard = ({
+  task,
+  onTaskClick,
+}: {
+  task: Task;
+  onTaskClick: (taskId: string) => void;
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({
+      id: task._id,
+    });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <button
+      ref={setNodeRef}
+      style={style}
+      type="button"
+      onClick={() => onTaskClick(task._id)}
+      className={cn(
+        "w-full text-left rounded-lg border p-2.5 transition hover:bg-muted/40",
+        isDragging ? "opacity-70" : ""
+      )}
+      {...attributes}
+      {...listeners}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <Badge
+          variant="outline"
+          className={cn("text-xs", getPriorityBadgeClass(task.priority))}
+        >
+          {task.priority}
+        </Badge>
+        {getStatusIcon(task.status)}
+      </div>
+
+      <p className="mt-2 font-medium line-clamp-1">{task.title}</p>
+      {task.description && (
+        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+          {task.description}
+        </p>
+      )}
+      <div className="mt-2 flex items-center justify-end">
+        {task.dueDate && (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <Calendar className="h-3 w-3" />
+            {format(new Date(task.dueDate), "dd MMM yyyy")}
+          </span>
+        )}
+      </div>
+      <div className="mt-2 flex -space-x-2">
+        {task.assignees?.slice(0, 3).map((assignee) => (
+          <Avatar key={assignee._id} className="h-6 w-6 border">
+            <AvatarImage src={assignee.profilePicture} />
+            <AvatarFallback>{assignee.name?.charAt(0) || "U"}</AvatarFallback>
+          </Avatar>
+        ))}
+      </div>
+    </button>
   );
 };
 
