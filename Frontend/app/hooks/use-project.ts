@@ -1,5 +1,5 @@
 import type { CreateProjectFormData } from "@/components/project/create-project";
-import { fetchData, postData } from "@/lib/fetch-util";
+import { deleteData, fetchData, postData, updateData } from "@/lib/fetch-util";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const UseCreateProject = () => {
@@ -26,8 +26,46 @@ export const UseProjectQuery = (projectId: string) => {
   return useQuery({
     queryKey: ["project", projectId],
     queryFn: () => fetchData(`/projects/${projectId}/tasks`),
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    staleTime: 1000 * 60 * 5,
+    enabled: Boolean(projectId),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
+};
+
+export const useUpdateProject = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      projectId: string;
+      projectData: CreateProjectFormData;
+    }) => updateData(`/projects/${data.projectId}`, data.projectData),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["project", variables.projectId],
+      });
+    },
+  });
+};
+
+export const useDeleteProject = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { projectId: string; workspaceId?: string }) =>
+      deleteData(`/projects/${data.projectId}`),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.removeQueries({ queryKey: ["project", variables.projectId] });
+      if (variables.workspaceId) {
+        queryClient.invalidateQueries({
+          queryKey: ["workspace", variables.workspaceId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["workspace", variables.workspaceId, "details"],
+        });
+      }
+    },
   });
 };

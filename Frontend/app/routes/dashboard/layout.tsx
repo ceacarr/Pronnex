@@ -5,6 +5,7 @@ import {
   Navigate,
   useLoaderData,
   useNavigate,
+  useParams,
   useSearchParams,
 } from "react-router";
 import type { Workspace } from "@/types";
@@ -13,6 +14,7 @@ import { useEffect, useState } from "react";
 import { SidebarComponent } from "@/components/layout/sidebar-component";
 import { CreateWorkspace } from "@/components/workspace/create-workspace";
 import { fetchData } from "@/lib/fetch-util";
+import { useGetWorkspacesQuery } from "@/hooks/use-workspace";
 
 export const clientLoader = async () => {
   try {
@@ -28,10 +30,14 @@ export const clientLoader = async () => {
 const DashboardLayout = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const loaderData = useLoaderData() as { workspaces?: Workspace[] } | null;
-  const workspaces = loaderData?.workspaces ?? [];
+  const { data: queryWorkspaces } = useGetWorkspacesQuery() as {
+    data?: Workspace[];
+  };
+  const workspaces = queryWorkspaces ?? loaderData?.workspaces ?? [];
   const navigate = useNavigate();
+  const params = useParams();
   const [searchParams] = useSearchParams();
-  const workspaceId = searchParams.get("workspaceId");
+  const workspaceId = params.workspaceId ?? searchParams.get("workspaceId");
   const selectedWorkspace =
     workspaces.find((workspace) => workspace._id === workspaceId) ??
     workspaces[0] ??
@@ -64,6 +70,7 @@ const DashboardLayout = () => {
         <Header
           onWorkspaceSelected={handleWorkspaceSelected}
           selectedWorkspace={currentWorkspace}
+          workspaces={workspaces}
           onCreatedWorkspace={() => setIsCreatingWorkspace(true)}
         />
         <main className="min-h-0 flex-1 overflow-y-auto w-full">

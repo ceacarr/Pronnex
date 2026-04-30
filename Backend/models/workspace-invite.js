@@ -5,7 +5,12 @@ const workspaceInviteSchema = new Schema(
     user: {
       type: Schema.Types.ObjectId,
       ref: "User",
+    },
+    email: {
+      type: String,
       required: true,
+      lowercase: true,
+      trim: true,
     },
     workspaceId: {
       type: Schema.Types.ObjectId,
@@ -30,7 +35,7 @@ const workspaceInviteSchema = new Schema(
 );
 
 workspaceInviteSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-workspaceInviteSchema.index({ user: 1, workspaceId: 1 });
+workspaceInviteSchema.index({ email: 1, workspaceId: 1 });
 
 const WorkspaceInvite = mongoose.model(
   "WorkspaceInvite",

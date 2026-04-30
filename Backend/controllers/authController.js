@@ -101,7 +101,9 @@ const loginUser = async (req, res) => {
             "Email not verified. Please check your email for the verification link.",
         });
       } else {
+        if (existingVerification) {
         await Verification.findByIdAndDelete(existingVerification._id);
+        }
 
         const verificationToken = jwt.sign(
           { userId: user._id, purpose: "email-verification" },
@@ -194,7 +196,12 @@ const verifyEmail = async (req, res) => {
     }
     
     if (user.isEmailVerified) {
-      return res.status(400).json({ message: "Email already verified" });
+      await Verification.findByIdAndDelete(verification._id);
+
+      return res.status(200).json({
+        success: true,
+        message: "Email already verified",
+      });
     }
       user.isEmailVerified = true;
       await user.save();

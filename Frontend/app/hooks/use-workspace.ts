@@ -1,5 +1,5 @@
 import type { WorkspaceForm } from "@/components/workspace/create-workspace";
-import { fetchData, postData } from "@/lib/fetch-util";
+import { deleteData, fetchData, postData } from "@/lib/fetch-util";
 import { projectSchema } from "@/lib/schema";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { z } from "zod";
@@ -7,8 +7,13 @@ import type { z } from "zod";
 type CreateProjectFormData = z.infer<typeof projectSchema>;
 
 export const useCreateWorkspace = () => {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (data: WorkspaceForm) => postData("/workspaces", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+    },
   });
 };
 
@@ -19,7 +24,8 @@ export const useCreateProject = () => {
     mutationFn: async (data: {
       workspaceId: string;
       projectData: CreateProjectFormData;
-    }) => postData(`/workspaces/${data.workspaceId}/projects`, data.projectData),
+    }) =>
+      postData(`/projects/${data.workspaceId}/create-project`, data.projectData),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["workspace", variables.workspaceId],
@@ -82,6 +88,22 @@ export const useAcceptGenerateInviteMutation = () => {
   return useMutation({
     mutationFn: (workspaceId: string) =>
       postData(`/workspaces/${workspaceId}/accept-generate-invite`, {}),
+  });
+};
+
+export const useDeleteWorkspaceMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workspaceId: string) => deleteData(`/workspaces/${workspaceId}`),
+    onSuccess: (_data, workspaceId) => {
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.removeQueries({ queryKey: ["workspace", workspaceId] });
+      queryClient.removeQueries({
+        queryKey: ["workspace", workspaceId, "details"],
+      });
+      queryClient.removeQueries({ queryKey: ["workspace", workspaceId, "stats"] });
+    },
   });
 };
 

@@ -2,7 +2,7 @@ import type { Workspace, User } from "@/types";
 import { WorkspaceAvatar } from "./workspace-avatar";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Button } from "../ui/button";
-import { Plus, UserPlus } from "lucide-react";
+import { Plus, Trash2, UserPlus } from "lucide-react";
 
 interface WorkspaceHeaderProps {
     workspace: Workspace;
@@ -13,12 +13,16 @@ interface WorkspaceHeaderProps {
     }[]; 
     onCreateProject: () => void;
     onInviteMember: () => void;
+    onDeleteWorkspace?: () => void;
+    canDeleteWorkspace?: boolean;
 }
 export const WorkspaceHeader = ({
     workspace,
     members,
     onCreateProject,
     onInviteMember,
+    onDeleteWorkspace,
+    canDeleteWorkspace = false,
 }: WorkspaceHeaderProps) => {
 
 
@@ -41,6 +45,16 @@ export const WorkspaceHeader = ({
               <UserPlus className="size-4 mr-2" />
               Invite
             </Button>
+            {canDeleteWorkspace && (
+              <Button
+                variant="ghost"
+                onClick={onDeleteWorkspace}
+                className="bg-red-100 text-red-600 hover:bg-red-100 hover:text-red-700"
+              >
+                <Trash2 className="size-4 mr-2" />
+                Delete
+              </Button>
+            )}
             <Button onClick={onCreateProject}>
               <Plus className="size-4 mr-2" />
               Create Project

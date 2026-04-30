@@ -88,9 +88,9 @@ export const MyTasksCalendarView = () => {
     const interactionGreen: Date[] = [];
 
     filteredTasks.forEach((task) => {
-      if (!task.updatedAt) return;
+      if (!task.dueDate) return;
 
-      const day = startOfLocalDay(new Date(task.updatedAt));
+      const day = startOfLocalDay(new Date(task.dueDate));
 
       if (task.priority === "High") interactionRed.push(day);
       else if (task.priority === "Medium") interactionYellow.push(day);
@@ -104,9 +104,9 @@ export const MyTasksCalendarView = () => {
     const selectedDay = startOfLocalDay(selectedDate).getTime();
 
     return filteredTasks.filter((task) => {
-      if (!task.updatedAt) return false;
+      if (!task.dueDate) return false;
 
-      return startOfLocalDay(new Date(task.updatedAt)).getTime() === selectedDay;
+      return startOfLocalDay(new Date(task.dueDate)).getTime() === selectedDay;
     });
   }, [filteredTasks, selectedDate]);
 
@@ -133,6 +133,8 @@ export const MyTasksCalendarView = () => {
             root: "w-full",
             months: "grid w-full grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3",
             month: "w-full",
+            button_previous: "hidden",
+            button_next: "hidden",
             table: "w-full border-collapse",
             month_caption:
               "flex h-(--cell-size) w-full items-center justify-center px-(--cell-size)",

@@ -40,7 +40,7 @@ app.use(helmet());
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 dakika
-  max: 100, // 15 dakika içinde aynı IP'den gelebilecek maksimum istek sayısı
+  max: process.env.NODE_ENV === "production" ? 100 : 1000,
   message: {
     status: 429,
     message: "Too many requests from this IP, please try again after 15 minutes",

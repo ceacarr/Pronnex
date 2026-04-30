@@ -1,5 +1,5 @@
-import {useParams} from "react-router";
-import {useTaskByIdQuery} from "@/hooks/use-task";
+import { useNavigate, useParams } from "react-router";
+import { useDeleteTaskMutation, useTaskByIdQuery } from "@/hooks/use-task";
 import type { Project, Task } from "@/types";
 import { Loader } from "@/components/loader";
 import { useAuth } from "@/provider/auth-context";
@@ -7,6 +7,14 @@ import { BackButton } from "@/components/back-button";
 import { CalendarClock, Eye, EyeOff, Flag, Orbit, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { TaskTitle } from "@/components/task/task-title";
 import { formatDistanceToNow } from "date-fns";
 import { TaskStatusSelector } from "@/components/task/task-status-selector";
@@ -19,13 +27,18 @@ import { TaskActivity } from "@/components/task/task-activity";
 import { CommentSection } from "@/components/task/comment-section";
 import { toast } from "sonner";
 import { useAchievedTaskMutation, useWatchTaskMutation } from "@/hooks/use-task";
+import { useState } from "react";
 
 
 const TaskDetails = () => {
     const {user} = useAuth();
-    const {taskId} = useParams<{
+    const navigate = useNavigate();
+    const { workspaceId, projectId, taskId } = useParams<{
+        workspaceId: string;
+        projectId: string;
         taskId: string;
     } > ();
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const { data, isLoading } = useTaskByIdQuery(taskId ?? "") as {
         data: {
             task: Task;
@@ -35,6 +48,8 @@ const TaskDetails = () => {
     }
     const { mutate: watchTask } = useWatchTaskMutation();
     const { mutate: achievedTask } = useAchievedTaskMutation();
+    const { mutate: deleteTask, isPending: isDeletingTask } =
+      useDeleteTaskMutation();
 
     if (isLoading){
         return (
@@ -79,8 +94,21 @@ const handleAchievedTask = () => {
     }
   })
 }
+const handleDeleteTask = () => {
+  deleteTask({ taskId: task._id, projectId }, {
+    onSuccess: () => {
+      toast.success("Task deleted successfully");
+      setIsDeleteDialogOpen(false);
+      navigate(`/workspace/${workspaceId}/projects/${projectId}`);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to delete task");
+    },
+  });
+}
 
-  return <div className="container mx-auto max-w-7xl space-y-5 p-0 py-4 md:px-4">
+  return <>
+  <div className="container mx-auto max-w-7xl space-y-5 p-0 py-4 md:px-4">
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
             <BackButton />
@@ -151,10 +179,10 @@ const handleAchievedTask = () => {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <TaskTitle title={task.title} taskId={task._id} />
                   <Button
-                    variant="destructive"
+                    variant="ghost"
                     size="sm"
-                    onClick={() => {}}
-                    className="w-fit"
+                    onClick={() => setIsDeleteDialogOpen(true)}
+                    className="w-fit bg-red-100 text-red-600 hover:bg-red-100 hover:text-red-700"
                   >
                     Delete Task
                   </Button>
@@ -212,5 +240,33 @@ const handleAchievedTask = () => {
           </div>
         </div>
   </div>
+  <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Delete task</DialogTitle>
+        <DialogDescription>
+          This will permanently delete "{task.title}" and its comments and
+          activity history. This action cannot be undone.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <Button
+          variant="outline"
+          onClick={() => setIsDeleteDialogOpen(false)}
+          disabled={isDeletingTask}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={handleDeleteTask}
+          disabled={isDeletingTask}
+        >
+          {isDeletingTask ? "Deleting..." : "Delete Task"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+  </>
 }
 export default TaskDetails;

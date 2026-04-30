@@ -2,6 +2,9 @@ import Workspace from "../models/workspace.js";
 import Project from "../models/project.js";
 import User from "../models/user.js";
 import WorkspaceInvite from "../models/workspace-invite.js";
+import Task from "../models/task.js";
+import Comment from "../models/comment.js";
+import ActivityLog from "../models/activity.js";
 import jwt from "jsonwebtoken";
 import { sendEmail } from "../libs/send-email.js";
 import { recordActivity } from "../libs/index.js";
@@ -307,10 +310,62 @@ const getWorkspaceStats = async (req, res) => {
     });
   }
 };
+const deleteWorkspace = async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+
+    const workspace = await Workspace.findById(workspaceId);
+
+    if (!workspace) {
+      return res.status(404).json({
+        message: "Workspace not found",
+      });
+    }
+
+    if (workspace.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        message: "Only the workspace owner can delete this workspace",
+      });
+    }
+
+    const projects = await Project.find({ workspace: workspaceId }).select("_id");
+    const projectIds = projects.map((project) => project._id);
+    const tasks = await Task.find({ project: { $in: projectIds } }).select("_id");
+    const taskIds = tasks.map((task) => task._id);
+    const comments = await Comment.find({ task: { $in: taskIds } }).select("_id");
+    const commentIds = comments.map((comment) => comment._id);
+
+    await Promise.all([
+      Comment.deleteMany({ _id: { $in: commentIds } }),
+      Task.deleteMany({ _id: { $in: taskIds } }),
+      Project.deleteMany({ _id: { $in: projectIds } }),
+      WorkspaceInvite.deleteMany({ workspaceId }),
+      ActivityLog.deleteMany({
+        $or: [
+          { resourceType: "Workspace", resourceId: workspace._id },
+          { resourceType: "Project", resourceId: { $in: projectIds } },
+          { resourceType: "Task", resourceId: { $in: taskIds } },
+          { resourceType: "Comment", resourceId: { $in: commentIds } },
+        ],
+      }),
+      Workspace.deleteOne({ _id: workspaceId }),
+    ]);
+
+    res.status(200).json({
+      message: "Workspace deleted successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
 const inviteUserToWorkspace = async (req, res) => {
   try {
     const { workspaceId } = req.params;
     const { email, role } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
 
     const workspace = await Workspace.findById(workspaceId);
 
@@ -330,17 +385,13 @@ const inviteUserToWorkspace = async (req, res) => {
       });
     }
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: normalizedEmail });
 
-    if (!existingUser) {
-      return res.status(400).json({
-        message: "User not found",
-      });
-    }
-
-    const isMember = workspace.members.some(
-      (member) => member.user.toString() === existingUser._id.toString()
-    );
+    const isMember =
+      existingUser &&
+      workspace.members.some(
+        (member) => member.user.toString() === existingUser._id.toString()
+      );
 
     if (isMember) {
       return res.status(400).json({
@@ -349,7 +400,7 @@ const inviteUserToWorkspace = async (req, res) => {
     }
 
     const isInvited = await WorkspaceInvite.findOne({
-      user: existingUser._id,
+      email: normalizedEmail,
       workspaceId: workspaceId,
     });
 
@@ -365,7 +416,7 @@ const inviteUserToWorkspace = async (req, res) => {
 
     const inviteToken = jwt.sign(
       {
-        user: existingUser._id,
+        email: normalizedEmail,
         workspaceId: workspaceId,
         role: role || "member",
       },
@@ -374,7 +425,8 @@ const inviteUserToWorkspace = async (req, res) => {
     );
 
     await WorkspaceInvite.create({
-      user: existingUser._id,
+      user: existingUser?._id,
+      email: normalizedEmail,
       workspaceId: workspaceId,
       token: inviteToken,
       role: role || "member",
@@ -387,11 +439,19 @@ const inviteUserToWorkspace = async (req, res) => {
       <p>Click here to join: <a href="${invitationLink}">${invitationLink}</a></p>
     `;
 
-    await sendEmail(
-      email,
+    const isEmailSent = await sendEmail(
+      normalizedEmail,
       "You have been invited to join a workspace",
       emailContent
     );
+
+    if (!isEmailSent) {
+      await WorkspaceInvite.deleteOne({ token: inviteToken });
+
+      return res.status(500).json({
+        message: "Failed to send invitation email",
+      });
+    }
 
     res.status(200).json({
       message: "Invitation sent successfully",
@@ -459,7 +519,14 @@ const acceptInviteByToken = async (req, res) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const { user, workspaceId, role } = decoded;
+    const { email, workspaceId, role } = decoded;
+    const normalizedEmail = email?.toLowerCase().trim();
+
+    if (!normalizedEmail || normalizedEmail !== req.user.email.toLowerCase()) {
+      return res.status(403).json({
+        message: "This invitation belongs to another email address",
+      });
+    }
 
     const workspace = await Workspace.findById(workspaceId);
 
@@ -470,7 +537,7 @@ const acceptInviteByToken = async (req, res) => {
     }
 
     const isMember = workspace.members.some(
-      (member) => member.user.toString() === user.toString()
+      (member) => member.user.toString() === req.user._id.toString()
     );
 
     if (isMember) {
@@ -480,7 +547,7 @@ const acceptInviteByToken = async (req, res) => {
     }
 
     const inviteInfo = await WorkspaceInvite.findOne({
-      user: user,
+      email: normalizedEmail,
       workspaceId: workspaceId,
     });
 
@@ -497,7 +564,7 @@ const acceptInviteByToken = async (req, res) => {
     }
 
     workspace.members.push({
-      user: user,
+      user: req.user._id,
       role: role || "member",
       joinedAt: new Date(),
     });
@@ -506,7 +573,7 @@ const acceptInviteByToken = async (req, res) => {
 
     await Promise.all([
       WorkspaceInvite.deleteOne({ _id: inviteInfo._id }),
-      recordActivity(user, "joined_workspace", "Workspace", workspaceId, {
+      recordActivity(req.user._id, "joined_workspace", "Workspace", workspaceId, {
         description: `Joined ${workspace.name} workspace`,
       }),
     ]);
@@ -527,6 +594,7 @@ export {
   getWorkspaceDetails,
   getWorkspaceProjects,
   getWorkspaceStats,
+  deleteWorkspace,
   inviteUserToWorkspace,
   acceptGenerateInvite,
   acceptInviteByToken,

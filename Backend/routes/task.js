@@ -19,6 +19,7 @@ import {
   addComment,
   watchTask,
   achievedTask,
+  deleteTask,
   getMyTasks,
 } from "../controllers/task.js";
 
@@ -137,6 +138,15 @@ router.put(
     body: z.object({ priority: z.string() }),
   }),
   updateTaskPriority
+);
+
+router.delete(
+  "/:taskId",
+  authMiddleware,
+  validateRequest({
+    params: z.object({ taskId: z.string() }),
+  }),
+  deleteTask
 );
 
 router.get(

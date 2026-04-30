@@ -11,7 +11,7 @@ import { getProjectProgress } from "@/lib";
 import { cn } from "@/lib/utils";
 import type { Project, Task, TaskPriority, TaskStatus } from "@/types";
 import { format } from "date-fns";
-import { AlertCircle, Calendar, CheckCircle, Clock } from "lucide-react";
+import { AlertCircle, Calendar, CheckCircle, Clock, Settings } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 
@@ -101,7 +101,18 @@ const ProjectDetails = () => {
             </span>
           </div>
 
-          <Button onClick={() => setIsCreateTask(true)}>Add Task</Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                navigate(`/workspace/${workspaceId}/projects/${projectId}/settings`)
+              }
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+            <Button onClick={() => setIsCreateTask(true)}>Add Task</Button>
+          </div>
         </div>
       </div>
 

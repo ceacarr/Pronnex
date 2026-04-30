@@ -13,26 +13,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { WorkspaceAvatar } from "../workspace/workspace-avatar";
-import { Link, useLoaderData } from "react-router";
+import { Link } from "react-router";
 import { useState, useEffect } from "react";
 
 interface HeaderProps {
   onWorkspaceSelected: (workspace: Workspace) => void;
   selectedWorkspace: Workspace | null;
+  workspaces: Workspace[];
   onCreatedWorkspace: () => void;
 }
 
 export const Header = ({
   onWorkspaceSelected,
   selectedWorkspace,
+  workspaces,
   onCreatedWorkspace,
 }: HeaderProps) => {
   const { user, logout } = useAuth();
-  const loaderData = useLoaderData() as { workspaces?: Workspace[] } | null;
-  const workspaces = loaderData?.workspaces ?? [];
-  const dashboardHref = selectedWorkspace?._id
-    ? `/dashboard?workspaceId=${selectedWorkspace._id}`
-    : "/dashboard";
 
   const [darkMode, setDarkMode] = useState(() => {
     return document.documentElement.classList.contains("dark");
@@ -71,7 +68,7 @@ export const Header = ({
               )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent className="w-64">
             <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -80,12 +77,14 @@ export const Header = ({
                   <DropdownMenuItem
                     key={ws._id}
                     onClick={() => onWorkspaceSelected(ws)}
-                    className="cursor-pointer"
+                    className="min-h-11 cursor-pointer gap-3 py-2"
                   >
                     {ws.color && (
                       <WorkspaceAvatar color={ws.color} name={ws.name} />
                     )}
-                    <span className="ml-2">{ws.name}</span>
+                    <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">
+                      {ws.name}
+                    </span>
                   </DropdownMenuItem>
                 ))
               ) : (
@@ -98,10 +97,12 @@ export const Header = ({
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={onCreatedWorkspace}
-                className="cursor-pointer"
+                className="min-h-11 cursor-pointer gap-3 py-2"
               >
-                <PlusCircle className="w-4 h-4" />
-                Create Workspace
+                <PlusCircle className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">
+                  Create Workspace
+                </span>
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
@@ -135,7 +136,7 @@ export const Header = ({
 
               <DropdownMenuItem asChild>
                 <Link
-                  to={dashboardHref}
+                  to="/user/profile"
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <User className="h-4 w-4" />

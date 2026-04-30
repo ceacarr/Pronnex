@@ -25,15 +25,6 @@ const AuthLayout = () => {
         </section>
 
         <section className="relative hidden overflow-hidden lg:flex">
-          <img
-            src="/images/auth-side.jpg"
-            alt="Auth visual"
-            className="absolute inset-0 h-full w-full object-cover"
-            onError={(event) => {
-              const target = event.currentTarget;
-              target.style.display = "none";
-            }}
-          />
           <div className="absolute inset-0 bg-gradient-to-br from-sky-800/95 via-blue-700/92 to-cyan-500/90" />
           <div className="absolute -left-24 top-10 h-80 w-80 rounded-full bg-cyan-300/50 blur-3xl animate-[authFloat_9s_ease-in-out_infinite]" />
           <div className="absolute -right-28 bottom-12 h-[26rem] w-[26rem] rounded-full bg-blue-500/45 blur-3xl animate-[authFloat_11s_ease-in-out_infinite_reverse]" />

@@ -55,6 +55,10 @@ const projectSchema = z.object({
     .optional(),
   tags: z.string().optional(),
 });
+ const inviteMemberSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(["admin", "member", "viewer"]),
+});
 
 export 
 {  
@@ -64,4 +68,5 @@ export
    forgotPasswordSchema,
    workspaceSchema,
    projectSchema,
+   inviteMemberSchema,
  };

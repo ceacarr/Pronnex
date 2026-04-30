@@ -70,8 +70,12 @@ const getTaskById = async (req,res) => {
   const isMember = project.members.some(
     (member) => String(member.user?._id || member.user) === String(req.user._id)
   );
+  const isAssignee = task.assignees.some(
+    (assignee) => String(assignee?._id || assignee) === String(req.user._id)
+  );
+  const isCreator = String(task.createdBy) === String(req.user._id);
 
-  if (!isMember) {
+  if (!isMember && !isAssignee && !isCreator) {
     return res.status(403).json({
       message: "You are not a member of this project",
     });
@@ -460,29 +464,24 @@ const addComment = async (req, res) => {
     }
 
     const project = await Project.findById(task.project);
-
     if (!project) {
       return res.status(404).json({
         message: "Project not found",
       });
     }
-
     const isMember = project.members.some(
       (member) => member.user.toString() === req.user._id.toString()
     );
-
     if (!isMember) {
       return res.status(403).json({
         message: "You are not a member of this project",
       });
     }
-
     const newComment = await Comment.create({
       text,
       task: taskId,
       author: req.user._id,
     });
-
     task.comments.push(newComment._id);
     await task.save();
 
@@ -492,7 +491,6 @@ const addComment = async (req, res) => {
         text.substring(0, 50) + (text.length > 50 ? "..." : "")
       }`,
     });
-
     res.status(201).json(newComment);
   } catch (error) {
     console.log(error);
@@ -608,6 +606,61 @@ const achievedTask = async (req, res) => {
     });
   }
 };
+const deleteTask = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    const task = await Task.findById(taskId);
+
+    if (!task) {
+      return res.status(404).json({
+        message: "Task not found",
+      });
+    }
+
+    const project = await Project.findById(task.project);
+
+    if (!project) {
+      return res.status(404).json({
+        message: "Project not found",
+      });
+    }
+
+    const isMember = project.members.some(
+      (member) => member.user.toString() === req.user._id.toString()
+    );
+
+    if (!isMember) {
+      return res.status(403).json({
+        message: "You are not a member of this project",
+      });
+    }
+
+    const comments = await Comment.find({ task: taskId }).select("_id");
+    const commentIds = comments.map((comment) => comment._id);
+
+    await Promise.all([
+      Comment.deleteMany({ _id: { $in: commentIds } }),
+      ActivityLog.deleteMany({
+        $or: [
+          { resourceType: "Task", resourceId: task._id },
+          { resourceType: "Comment", resourceId: { $in: commentIds } },
+        ],
+      }),
+      Project.updateOne({ _id: project._id }, { $pull: { tasks: task._id } }),
+      Task.deleteOne({ _id: taskId }),
+    ]);
+
+    res.status(200).json({
+      message: "Task deleted successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
 const getMyTasks = async (req, res) => {
   try {
     const tasks = await Task.find({ assignees: { $in: [req.user._id] } })
@@ -638,5 +691,6 @@ export {
   addComment,
   watchTask,
   achievedTask,
+  deleteTask,
   getMyTasks,
 };
