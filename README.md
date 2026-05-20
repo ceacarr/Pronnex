@@ -1,4 +1,4 @@
-Pronnex
+
 Pronnex is a project and task management application built with a React frontend and an Express/MongoDB backend. It supports workspaces, projects, task boards, task details, comments, subtasks, members, invitations, archived tasks, profile settings, and dashboard statistics.
 
 Features
