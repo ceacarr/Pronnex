@@ -5,6 +5,8 @@ Pronnex is a project and task management application built with a React frontend
 It supports workspaces, projects, task boards, task details, comments, subtasks, members, invitations, archived tasks, profile settings, and dashboard statistics.
 
 ---
+<img width="1919" height="998" alt="Screenshot 2026-06-05 161620" src="https://github.com/user-attachments/assets/88f0069b-97d6-4c0d-b20e-426fbac5d1d3" />
+<img width="1919" height="971" alt="Screenshot 2026-06-05 161548" src="https://github.com/user-attachments/assets/429b7513-09cb-477f-b40c-91cfca25bf03" />
 
 ## Features
 
